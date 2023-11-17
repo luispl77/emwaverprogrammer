@@ -197,7 +197,7 @@ public class Dfu {
         }
 
         clearWaitIDLE(dfuStatus);
-
+        Log.i(TAG, "writing block: " + blockNumber);
         download(block, (blockNumber + 2));
         executeVerifyStatus(dfuStatus, "block write");
 
@@ -210,19 +210,21 @@ public class Dfu {
 
         clearWaitIDLE(dfuStatus);
 
-        //set block number for the first block written
-        /*if (0 == blockNumber) {
+        //set address for the first block written
+        if (0 == blockNumber) {
             Log.i(TAG, "reading address: 0x" + Integer.toHexString(address));
             setAddressPointer(address);
         }
 
-        clearWaitIDLE(dfuStatus);*/
+        clearWaitIDLE(dfuStatus);
 
         upload(block, block.length, (blockNumber + 2));
+        getStatus(dfuStatus); //for upload its reading from memory so its very fast. No BUSY state.
         //executeVerifyStatus(dfuStatus, "block read");
 
         clearWaitIDLE(dfuStatus);
     }
+
 
     //execute and verify action using getStatus(). arguments: where the error occurs (for what operation)
     private void executeVerifyStatus(DfuStatus dfuStatus, String operation) throws Exception {
@@ -238,10 +240,10 @@ public class Dfu {
 
     // Clears status and waits for DFU_IDLE status. useful to crear DFU_ERROR status.
     private void clearWaitIDLE(DfuStatus dfuStatus) throws Exception {
-        while (dfuStatus.bState != STATE_DFU_IDLE) {
+        do {
             clearStatus();
             getStatus(dfuStatus);
-        }
+        } while (dfuStatus.bState != STATE_DFU_IDLE);
     }
 
     private void getStatus(DfuStatus status) throws Exception {
@@ -268,6 +270,7 @@ public class Dfu {
 
     private void upload(byte[] data, int length, int blockNum) throws Exception {
         int len = usb.controlTransfer(DFU_RequestType | USB_DIR_IN, DFU_UPLOAD, blockNum, 0, data, length, 100);
+        Log.i(TAG, "block number: " + blockNum + "length");
         if (len < 0) {
             throw new Exception("USB comm failed during upload");
         }
@@ -287,6 +290,28 @@ public class Dfu {
         if (len < 0) {
             throw new Exception("USB Failed during multi-block download");
         }
+    }
+
+    public void readImage(byte[] deviceFw) throws Exception {
+
+        DfuStatus dfuStatus = new DfuStatus();
+        int maxBlockSize = 4;
+        int startAddress = 0x08000004;
+        byte[] block = new byte[maxBlockSize];
+        int nBlock = 0;
+        int remLength = deviceFw.length;
+        int numOfBlocks = remLength / maxBlockSize;
+
+        clearWaitIDLE(dfuStatus);
+
+        setAddressPointer(startAddress);
+
+        clearWaitIDLE(dfuStatus);
+
+        upload(block, maxBlockSize, nBlock + 2);
+        getStatus(dfuStatus); //for
+        Log.i(TAG, "reading: 0x" + Integer.toHexString(block[0]) + Integer.toHexString(block[1]) + Integer.toHexString(block[2]) + Integer.toHexString(block[3]));
+
     }
 
     // stores the result of a GetStatus DFU request

@@ -48,8 +48,8 @@ public class MainActivity extends Activity implements
         program.setOnClickListener(new Button.OnClickListener() {
             @Override
             public void onClick(View v) {
-                int writeAddress = 0x08000000;
-                byte[] dataBlock = new byte[] { 0x69, 0x69, 0x69, 0x69 };
+                int writeAddress = 0x08000004;
+                byte[] dataBlock = new byte[] { 0x70, 0x70, 0x70, 0x70 };
                 int blockNumber = 0;
                 try {
                     dfu.writeBlock(writeAddress, dataBlock, blockNumber);
@@ -64,9 +64,9 @@ public class MainActivity extends Activity implements
         read.setOnClickListener(new Button.OnClickListener() {
             @Override
             public void onClick(View v) {
-                int readAddress = 0x08000000;
+                int readAddress = 0x08000004;
                 int blockNumber = 0;
-                byte[] dataBlockRead = new byte[4];
+                byte[] dataBlockRead = new byte[8];
                 try {
                     dfu.readBlock(readAddress, dataBlockRead, blockNumber);
                     StringBuilder hexString = new StringBuilder();
@@ -75,6 +75,13 @@ public class MainActivity extends Activity implements
                     status.append("Data read successfully: 0x" + hexString.toString() + "\n");
                 } catch (Exception e) {
                     status.append("Error reading data: " + e.getMessage() + "\n");
+                }
+
+                byte[] image = new byte[900];
+                try {
+                    dfu.readImage(image);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
                 }
             }
         });

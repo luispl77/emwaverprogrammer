@@ -70,6 +70,26 @@
                 android:clickable="true"
                 android:text="test read first block"/>
 
+            <Button
+                android:id="@+id/btnCustom3"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentLeft="true"
+                android:layout_alignParentStart="true"
+                android:layout_below="@+id/btnCustom2"
+                android:clickable="true"
+                android:text="read all"/>
+
+            <Button
+                android:id="@+id/clearTxt"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentLeft="true"
+                android:layout_alignParentStart="true"
+                android:layout_below="@+id/btnCustom3"
+                android:clickable="true"
+                android:text="clear"/>
+
         </RelativeLayout>
     </LinearLayout>
 </ScrollView>

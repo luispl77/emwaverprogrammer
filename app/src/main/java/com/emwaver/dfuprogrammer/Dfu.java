@@ -172,7 +172,7 @@ public class Dfu {
         download(buffer);
     }
 
-    private void setAddressPointer(int Address) throws Exception {
+    public void setAddressPointer(int Address) throws Exception {
         byte[] buffer = new byte[5];
         DfuStatus dfuStatus = new DfuStatus();
         buffer[0] = 0x21;
@@ -208,6 +208,7 @@ public class Dfu {
 
         DfuStatus dfuStatus = new DfuStatus();
 
+
         clearWaitIDLE(dfuStatus);
 
         //set address for the first block written
@@ -239,7 +240,7 @@ public class Dfu {
     }
 
     // Clears status and waits for DFU_IDLE status. useful to crear DFU_ERROR status.
-    private void clearWaitIDLE(DfuStatus dfuStatus) throws Exception {
+    public void clearWaitIDLE(DfuStatus dfuStatus) throws Exception {
         do {
             clearStatus();
             getStatus(dfuStatus);
@@ -268,7 +269,7 @@ public class Dfu {
     }
 
 
-    private void upload(byte[] data, int length, int blockNum) throws Exception {
+    public void upload(byte[] data, int length, int blockNum) throws Exception {
         int len = usb.controlTransfer(DFU_RequestType | USB_DIR_IN, DFU_UPLOAD, blockNum, 0, data, length, 100);
         Log.i(TAG, "block number: " + blockNum + "length");
         if (len < 0) {
@@ -292,6 +293,7 @@ public class Dfu {
         }
     }
 
+    //for tests only
     public void readImage(byte[] deviceFw) throws Exception {
 
         DfuStatus dfuStatus = new DfuStatus();
@@ -315,7 +317,7 @@ public class Dfu {
     }
 
     // stores the result of a GetStatus DFU request
-    private class DfuStatus {
+    public class DfuStatus {
         byte bStatus;       // state during request
         int bwPollTimeout;  // minimum time in ms before next getStatus call should be made
         byte bState;        // state after request

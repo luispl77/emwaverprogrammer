@@ -2,6 +2,7 @@ package com.emwaver.dfuprogrammer;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import android.util.Log;
 
 import android.app.Activity;
 import android.content.Context;
@@ -44,6 +45,14 @@ public class MainActivity extends Activity implements
             }
         });
 
+        Button clearTxtView = findViewById(R.id.clearTxt);
+        clearTxtView.setOnClickListener(new Button.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                status.setText("");
+            }
+        });
+
         Button program = findViewById(R.id.btnCustom);
         program.setOnClickListener(new Button.OnClickListener() {
             @Override
@@ -64,9 +73,9 @@ public class MainActivity extends Activity implements
         read.setOnClickListener(new Button.OnClickListener() {
             @Override
             public void onClick(View v) {
-                int readAddress = 0x08000004;
-                int blockNumber = 0;
-                byte[] dataBlockRead = new byte[8];
+                int readAddress = 0x08000000;
+                int blockNumber = 1;
+                byte[] dataBlockRead = new byte[4];
                 try {
                     dfu.readBlock(readAddress, dataBlockRead, blockNumber);
                     StringBuilder hexString = new StringBuilder();
@@ -82,6 +91,33 @@ public class MainActivity extends Activity implements
                     dfu.readImage(image);
                 } catch (Exception e) {
                     throw new RuntimeException(e);
+                }
+            }
+        });
+
+        Button readAll = findViewById(R.id.btnCustom3);
+        readAll.setOnClickListener(new Button.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                int startAddress = 0x08000000;
+                //int endAddress = 0x08006A90;
+                int endAddress = 0x08000040;
+                byte[] block = new byte[4];
+
+                for (int address = startAddress; address <= endAddress; address += block.length) {
+                    try {
+                        dfu.readBlock(0x08000000, block, (address - startAddress)/4);
+                        // Directly convert the byte array to a hex string
+                        StringBuilder hexString = new StringBuilder();
+                        for (byte b : block) {
+                            hexString.append(String.format("%02X", b));
+                        }
+
+                        status.append("Block " + (address - startAddress) / 4 + " Address 0x" + Integer.toHexString(address) + ": " + hexString.toString() + "\n");
+
+                    } catch (Exception e) {
+                        status.append("Error reading flash at address 0x" + Integer.toHexString(address) + e.getMessage() + "\n");
+                    }
                 }
             }
         });

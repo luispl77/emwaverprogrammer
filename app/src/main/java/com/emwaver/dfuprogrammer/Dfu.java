@@ -188,20 +188,29 @@ public class Dfu {
 
         DfuStatus dfuStatus = new DfuStatus();
 
-        clearWaitIDLE(dfuStatus);
-
-        //set block number for the first block written
-        if (0 == blockNumber) {
-            Log.i(TAG, "writing address: 0x" + Integer.toHexString(address));
-            setAddressPointer(address);
+        while (dfuStatus.bState != STATE_DFU_IDLE){
+            clearStatus();
+            getStatus(dfuStatus);
         }
 
-        clearWaitIDLE(dfuStatus);
+        //set block number for the first block written
+        /*if (0 == blockNumber) {
+            Log.i(TAG, "writing address: 0x" + Integer.toHexString(address));
+            setAddressPointer(address);
+        }*/
+        Log.i(TAG, "writing address: 0x" + Integer.toHexString(address));
+        setAddressPointer(address);
+
+        while (dfuStatus.bState != STATE_DFU_IDLE){
+            clearStatus();
+            getStatus(dfuStatus);
+        }
+
         Log.i(TAG, "writing block: " + blockNumber);
         download(block, (blockNumber + 2));
         executeVerifyStatus(dfuStatus, "block write");
 
-        clearWaitIDLE(dfuStatus);
+        //clearWaitIDLE(dfuStatus);
     }
 
     public void readBlock(int address, byte[] block, int blockNumber) throws Exception {
@@ -212,10 +221,12 @@ public class Dfu {
         clearWaitIDLE(dfuStatus);
 
         //set address for the first block written
-        if (0 == blockNumber) {
+        /*if (0 == blockNumber) {
             Log.i(TAG, "reading address: 0x" + Integer.toHexString(address));
             setAddressPointer(address);
-        }
+        }*/
+        //Log.i(TAG, "reading address: 0x" + Integer.toHexString(address));
+        setAddressPointer(address);
 
         clearWaitIDLE(dfuStatus);
 
@@ -223,7 +234,7 @@ public class Dfu {
         getStatus(dfuStatus); //for upload its reading from memory so its very fast. No BUSY state.
         //executeVerifyStatus(dfuStatus, "block read");
 
-        clearWaitIDLE(dfuStatus);
+        //clearWaitIDLE(dfuStatus);
     }
 
 

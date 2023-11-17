@@ -2,6 +2,13 @@ package com.emwaver.dfuprogrammer;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+import android.Manifest;
+
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.util.Log;
 
 import android.app.Activity;
@@ -15,7 +22,10 @@ import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
+import android.widget.Toast;
 
+import java.io.BufferedInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
 
@@ -24,7 +34,8 @@ public class MainActivity extends Activity implements
 
     private Usb usb;
     private Dfu dfu;
-
+    private static final int REQUEST_CODE_ATTACH = 1;
+    private static final int PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE = 100; // A unique request code
     private TextView status;
 
     @Override
@@ -32,10 +43,24 @@ public class MainActivity extends Activity implements
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        // Check for the permission
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            // Permission is not granted, request it
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE);
+        }
+
         dfu = new Dfu(Usb.USB_VENDOR_ID, Usb.USB_PRODUCT_ID, this);
         dfu.setListener(this);
 
         status = findViewById(R.id.status);
+
+        Button attachButton = findViewById(R.id.btnAttach);
+        attachButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                openFileChooser();
+            }
+        });
 
         Button massErase = findViewById(R.id.btnMassErase);
         massErase.setOnClickListener(new Button.OnClickListener() {
@@ -95,6 +120,49 @@ public class MainActivity extends Activity implements
             }
         });
 
+        Button writeFile = findViewById(R.id.btnCustom4);
+        writeFile.setOnClickListener(new Button.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                int startAddress = 0x08000000;
+                int endAddress = 0x08000080;
+                byte[] block = new byte[4];
+
+                try {
+                    // Open the dfu.dfu file from assets
+                    InputStream inputStream = getAssets().open("dfu.dfu");
+                    BufferedInputStream bufferedInputStream = new BufferedInputStream(inputStream);
+
+
+                    int addressOffset = 0; // Offset from the start address
+                    int currentAddress = 0;
+
+                    while (currentAddress < endAddress && bufferedInputStream.read(block) != -1) {
+                        currentAddress = startAddress + addressOffset;
+                        /*status.append(String.format("file read "));
+                        for (int i = 0; i < 4; i++)
+                            status.append(String.format("%02X ", block[i]));
+                        status.append(String.format("\n"));*/
+                        try {
+                            // Write the block to the dfu at the current address
+                            dfu.writeBlock(currentAddress, block, 0); // blockNumber is always 0
+                            status.append("Data written to address 0x" + Integer.toHexString(currentAddress) + "\n");
+                            addressOffset += block.length;
+
+                        } catch (Exception e) {
+                            status.append("Error writing to dfu at address 0x" + Integer.toHexString(currentAddress) + ": " + e.getMessage() + "\n");
+                        }
+                    }
+
+                    bufferedInputStream.close();
+                    inputStream.close();
+
+                } catch (IOException e) {
+                    status.append("Error opening dfu.dfu file: " + e.getMessage() + "\n");
+                }
+            }
+        });
+
         Button readAll = findViewById(R.id.btnCustom3);
         readAll.setOnClickListener(new Button.OnClickListener() {
             @Override
@@ -106,7 +174,7 @@ public class MainActivity extends Activity implements
 
                 for (int address = startAddress; address <= endAddress; address += block.length) {
                     try {
-                        dfu.readBlock(0x08000000, block, (address - startAddress)/4);
+                        dfu.readBlock(address, block, 0);
                         // Directly convert the byte array to a hex string
                         StringBuilder hexString = new StringBuilder();
                         for (byte b : block) {
@@ -121,6 +189,61 @@ public class MainActivity extends Activity implements
                 }
             }
         });
+
+        Button writeVerify = findViewById(R.id.btnCustom5);
+        writeVerify.setOnClickListener(new Button.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        int startAddress = 0x08000000;
+                        int endAddress = 0x08000080;
+                        byte[] block = new byte[4];
+                        byte[] blockReading = new byte[4];
+                        int addressOffset = 0; // Offset from the start address
+                        int currentAddress = 0;
+
+                        try {
+                            // Open the dfu.dfu file from assets
+                            InputStream inputStream = getAssets().open("dfu.dfu");
+                            BufferedInputStream bufferedInputStream = new BufferedInputStream(inputStream);
+
+                            while (currentAddress < endAddress && bufferedInputStream.read(block) != -1) {
+                                currentAddress = startAddress + addressOffset;
+                                try {
+                                    // Write the block to the dfu at the current address
+                                    dfu.writeBlock(currentAddress, block, 0); // blockNumber is always 0
+                                    dfu.readBlock(currentAddress, blockReading, 0);
+                                    if(!Arrays.equals(block, blockReading))
+                                        continue; //if verification fails, go back and repeat
+                                    final int finalCurrentAddress = currentAddress; // final copy
+                                    runOnUiThread(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            status.append("Data written to address 0x" + Integer.toHexString(finalCurrentAddress) + "\n");
+                                        }
+                                    });
+                                    addressOffset += block.length;
+
+                                } catch (Exception e) {
+                                    status.append("Error writing to dfu at address 0x" + Integer.toHexString(currentAddress) + ": " + e.getMessage() + "\n");
+                                }
+                            }
+
+                            bufferedInputStream.close();
+                            inputStream.close();
+
+                        } catch (IOException e) {
+                            status.append("Error opening dfu.dfu file: " + e.getMessage() + "\n");
+                        }
+                    }
+                }).start();
+            }
+        });
+
+
     }
 
     @Override
@@ -153,6 +276,30 @@ public class MainActivity extends Activity implements
         try {
             unregisterReceiver(usb.getmUsbReceiver());
         } catch (IllegalArgumentException e) { /* Already unregistered */ }
+    }
+
+    private void openFileChooser() {
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.setType("*/*"); // Set type for file (e.g., "image/*" for images)
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+
+        try {
+            startActivityForResult(Intent.createChooser(intent, "Select a file"), REQUEST_CODE_ATTACH);
+        } catch (android.content.ActivityNotFoundException ex) {
+            // Handle if no file chooser is available
+            Toast.makeText(this, "Please install a File Manager.", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == REQUEST_CODE_ATTACH && resultCode == RESULT_OK && data != null) {
+            Uri fileUri = data.getData();
+            // Handle the selected file
+            // ...
+        }
     }
 
     @Override

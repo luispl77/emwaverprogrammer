@@ -90,6 +90,37 @@
                 android:clickable="true"
                 android:text="clear"/>
 
+            <Button
+                android:id="@+id/btnCustom4"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentLeft="true"
+                android:layout_alignParentStart="true"
+                android:layout_below="@+id/clearTxt"
+                android:clickable="true"
+                android:text="write file"/>
+
+            <Button
+                android:id="@+id/btnCustom5"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentLeft="true"
+                android:layout_alignParentStart="true"
+                android:layout_below="@+id/btnCustom4"
+                android:clickable="true"
+                android:text="write file all"/>
+
+
+            <Button
+                android:id="@+id/btnAttach"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentLeft="true"
+                android:layout_alignParentStart="true"
+                android:layout_below="@+id/btnCustom5"
+                android:clickable="true"
+                android:text="select file"/>
+
         </RelativeLayout>
     </LinearLayout>
 </ScrollView>

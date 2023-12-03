@@ -29,6 +29,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 @SuppressWarnings("unused")
@@ -83,6 +84,25 @@ public class Dfu {
     private static final int OPT_RDP_OFF = 0xAA00;
     private static final int OPT_RDP_1 = 0x3300;
 
+    private final static String[] DEVICE_STATE = {
+            "OK", "errTARGET", "errFILE",
+            "errWRITE", "errERASE", "errCHECK_ERASED", "errPROG", "errVERIFY",
+            "errADDRESS", "errNOTDONE", "errFIRMWARE", "errVENDOR", "errUSBR",
+            "errPOR", "errUNKNOWN", "errSTALLEDPKT"
+    };
+    private final static String[] DEVICE_STATUS = {
+            "appIDLE", "appDETACH", "dfuIDLE",
+            "dfuDNLOAD -SYNC", "dfuDNBUSY", "dfuDNLOAD -IDLE", "dfuMANIFEST-SYNC", "dfuMANIFEST",
+            "dfuMANIFEST-WAIT-RESET", "dfuUPLOAD -IDLE", "dfuERROR"
+    };
+
+    private final static int DFU_REQUEST_TYPE_IN =  0b10100001; // Adjust according to your needs
+    private final static int STATE_OK = 0;
+    private final static int DFU_REQUEST_TYPE_OUT = 0b00100001; // OUT Endpoint, Class Request, Interface Recipient
+
+    private final static int BLOCK_SIZE = 2048; // wTransferSize
+
+
 
     private final int deviceVid;
     private final int devicePid;
@@ -124,32 +144,6 @@ public class Dfu {
     }
 
 
-    public void massErase() {
-
-        if (!isUsbConnected()) return;
-
-        DfuStatus dfuStatus = new DfuStatus();
-        long startTime = System.currentTimeMillis();  // note current time
-
-        try {
-            clearWaitIDLE(dfuStatus);
-            massEraseCommand();                 // sent erase command request
-            getStatus(dfuStatus);                // initiate erase command, returns 'download busy' even if invalid address or ROP
-            int pollingTime = dfuStatus.bwPollTimeout;  // note requested waiting time
-            do {
-            /* wait specified time before next getStatus call */
-                Thread.sleep(pollingTime);
-                clearStatus();
-                getStatus(dfuStatus);
-            } while (dfuStatus.bState != STATE_DFU_IDLE);
-            onStatusMsg("Mass erase completed in " + (System.currentTimeMillis() - startTime) + " ms");
-
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        } catch (Exception e) {
-            onStatusMsg(e.toString());
-        }
-    }
 
     // check if usb device is active
     private boolean isUsbConnected() {
@@ -160,172 +154,281 @@ public class Dfu {
         return false;
     }
 
-    private void massEraseCommand() throws Exception {
-        byte[] buffer = new byte[1];
-        buffer[0] = 0x41;
-        download(buffer); //single byte buffer for mass erase
-    }
 
-    private void unProtectCommand() throws Exception {
+
+    private void read_unprotect() throws Exception {
         byte[] buffer = new byte[1];
         buffer[0] = (byte) 0x92;
-        download(buffer);
+        //download(buffer);
     }
 
-    public void setAddressPointer(int Address) throws Exception {
+
+    public int get_status(byte[] buffer)  throws Exception {
+        int r = usb.controlTransfer(DFU_REQUEST_TYPE_IN, DFU_GETSTATUS, 0, 0, buffer, 6, 500);
+        if (r < 0) {
+            throw new Exception("error: get_status() control transfer failed");
+        } else {
+            byte state = buffer[1]; // Ensure unsigned byte
+            byte status = buffer[4]; // Ensure unsigned byte
+            if (state < DEVICE_STATE.length) {
+                Log.i("Dfu", "state " + state + ": " + DEVICE_STATE[state]);
+            } else {
+                Log.i("Dfu", "state " + state + ": OUT OF RANGE");
+            }
+            Log.i("Dfu", "status " + status + ": " + DEVICE_STATUS[status]);
+        }
+        return r;
+    }
+
+    public int clear_status() throws Exception  {
+        int r = usb.controlTransfer(DFU_REQUEST_TYPE_OUT, DFU_CLRSTATUS, 0, 0, null, 0, 5000);
+        if (r < 0) {
+            throw new Exception("error: clear_status() control transfer failed");
+        }
+        return r;
+    }
+
+    public void wait_download_idle() throws Exception {
+        byte[] status = new byte[6];
+        long startTime = System.currentTimeMillis();
+        long timeout = 500;
+        get_status(status);
+        while (!(status[4] == STATE_DFU_IDLE || status[4] == STATE_DFU_DOWNLOAD_IDLE)) {
+            // Check if timeout has been reached
+            if (System.currentTimeMillis() - startTime > timeout) {
+                throw new Exception("error: Timeout exceeded while waiting for download idle state");
+            }
+            clear_status();
+            get_status(status);
+        }
+    }
+
+    public void wait_upload_idle() throws Exception {
+        byte[] status = new byte[6];
+        long startTime = System.currentTimeMillis();
+        long timeout = 500;
+        get_status(status);
+        while (!(status[4] == STATE_DFU_IDLE || status[4] == STATE_DFU_UPLOAD_IDLE)) {
+            // Check if timeout has been reached
+            if (System.currentTimeMillis() - startTime > timeout) {
+                throw new Exception("error: Timeout exceeded while waiting for download idle state");
+            }
+            clear_status();
+            get_status(status);
+        }
+    }
+
+    public int mass_erase() throws Exception  {
+        byte[] massEraseCommand = {0x41};
+        byte[] status = new byte[6];
+        int bwPollTimeout;
+
+        // Assuming wait_idle() is implemented and called here
+        wait_download_idle();
+
+        int r = usb.controlTransfer(DFU_REQUEST_TYPE_OUT, DFU_DNLOAD, 0, 0, massEraseCommand, 1, 50);
+        if (r < 0) {
+            throw new Exception("error: mass_erase() control transfer failed");
+        }
+
+        // Verify execution and success
+        get_status(status); // Assuming getStatus() updates and logs the status
+        if ((status[4] == STATE_DFU_DOWNLOAD_BUSY || status[4] == STATE_DFU_DOWNLOAD_IDLE)) {
+            Log.i("Dfu", "mass erasing...");
+            onStatusMsg("mass erasing...\n");
+        } else {
+            Log.i("Dfu", "error while mass erasing (not dfuDNBUSY)");
+            throw new Exception("error while mass erasing (not dfuDNBUSY)");
+        }
+
+        bwPollTimeout = (status[3] & 0xFF) << 16;
+        bwPollTimeout |= (status[2] & 0xFF) << 8;
+        bwPollTimeout |= (status[1] & 0xFF);
+        Thread.sleep(bwPollTimeout); //Minimum time, in milliseconds, that the host should wait before sending a subsequent DFU_GETSTATUS request
+
+        get_status(status); // Get status again
+        if ((status[4] == STATE_DFU_IDLE || status[4] == STATE_DFU_DOWNLOAD_IDLE)) {
+            Log.i("Dfu", "mass erase complete.");
+            onStatusMsg("mass erase complete.\n");
+        } else {
+            Log.i("Dfu", "mass erase failed");
+            throw new Exception("error while mass erasing (not dfuDNBUSY)");
+        }
+
+        return r;
+    }
+
+    public int read_block(byte[] buffer, int block, int num_bytes) {
+        int r = usb.controlTransfer(DFU_REQUEST_TYPE_IN, DFU_UPLOAD, block, 0, buffer, num_bytes, 500);
+        if (r < 0) {
+            Log.i("Dfu", "error: read_block() control transfer failed");
+        }
+        return r;
+    }
+
+    private void print_block(byte[] buffer, int startAddress, int blockSize) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < blockSize; i += 16) {
+            sb.append(String.format("0x%08X: ", startAddress + i));
+            int remaining = Math.min(blockSize - i, 16);
+
+            for (int j = 0; j < remaining; j++) {
+                sb.append(String.format("%02x", buffer[i + j] & 0xFF));
+                if ((j + 1) % 4 == 0 && j + 1 < remaining) {
+                    sb.append("  ");
+                }
+            }
+            sb.append("\n");
+        }
+        onStatusMsg(sb.toString());
+    }
+
+    public void read_flash(int flashSize) throws Exception{
+        byte[] data = new byte[BLOCK_SIZE];
+        int blockNum;
+        int startAddress = 0x08000000;
+        wait_upload_idle();
+
+        for (blockNum = 0; blockNum < (flashSize / BLOCK_SIZE); blockNum++) {
+            read_block(data, 2 + blockNum, BLOCK_SIZE);
+            print_block(data, startAddress + (blockNum * BLOCK_SIZE), BLOCK_SIZE);
+            onStatusMsg("\n");
+        }
+
+        // Read remaining data
+        int remainingSize = flashSize % BLOCK_SIZE;
+        if (remainingSize > 0) {
+            read_block(data, 2 + blockNum, remainingSize);
+            print_block(data, startAddress + (blockNum * BLOCK_SIZE), remainingSize);
+        }
+    }
+
+    public int write_block(byte[] buffer, int block, int numBytes) throws Exception {
+        int bwPollTimeout;
+        wait_download_idle(); // Make sure we are in dfuIDLE or dfuDNLOAD-IDLE state
+
+        // Write block control transfer
+        int r = usb.controlTransfer(DFU_REQUEST_TYPE_OUT, DFU_DNLOAD, block, 0, buffer, numBytes, 500);
+        if (r < 0) {
+            throw new Exception("error: write_block() control transfer failed");
+        }
+
+        // Verify execution and success
+        byte[] status = new byte[6];
+        get_status(status);
+        if (status[4] == STATE_DFU_DOWNLOAD_BUSY || status[4] == STATE_DFU_DOWNLOAD_IDLE) {
+            onStatusMsg("writing block...");
+        } else {
+            throw new Exception("error while writing (not dfuDNBUSY)");
+        }
+
+        bwPollTimeout = (status[3] & 0xFF) << 16;
+        bwPollTimeout |= (status[2] & 0xFF) << 8;
+        bwPollTimeout |= (status[1] & 0xFF);
+        Thread.sleep(bwPollTimeout); //Minimum time, in milliseconds, that the host should wait before sending a subsequent DFU_GETSTATUS request
+
+        get_status(status);
+        if (status[4] == STATE_DFU_IDLE || status[4] == STATE_DFU_DOWNLOAD_IDLE) {
+            onStatusMsg("block write complete.\n");
+        } else {
+            throw new Exception("block write failed");
+        }
+
+        return r;
+    }
+
+    public int set_address_pointer(int address) throws Exception {
         byte[] buffer = new byte[5];
-        DfuStatus dfuStatus = new DfuStatus();
-        buffer[0] = 0x21;
-        buffer[1] = (byte) (Address & 0xFF);
-        buffer[2] = (byte) ((Address >> 8) & 0xFF);
-        buffer[3] = (byte) ((Address >> 16) & 0xFF);
-        buffer[4] = (byte) ((Address >> 24) & 0xFF);
-        download(buffer);
-        executeVerifyStatus(dfuStatus, "set address pointer");
-    }
+        int bwPollTimeout;
+        buffer[0] = 0x21; // Set address pointer command
+        buffer[1] = (byte) (address & 0xFF);
+        buffer[2] = (byte) ((address >> 8) & 0xFF);
+        buffer[3] = (byte) ((address >> 16) & 0xFF);
+        buffer[4] = (byte) ((address >> 24) & 0xFF);
 
-    public void writeBlock(int address, byte[] block, int blockNumber) throws Exception {
+        wait_download_idle(); // Make sure we are in dfuIDLE or dfuDNLOAD-IDLE state
 
-        DfuStatus dfuStatus = new DfuStatus();
-
-        while (dfuStatus.bState != STATE_DFU_IDLE){
-            clearStatus();
-            getStatus(dfuStatus);
+        // Set address pointer control transfer
+        int r = usb.controlTransfer(DFU_REQUEST_TYPE_OUT, DFU_DNLOAD, 0, 0, buffer, buffer.length, 50);
+        if (r < 0) {
+            throw new Exception("error: set_address_pointer() control transfer failed");
         }
 
-        //set block number for the first block written
-        /*if (0 == blockNumber) {
-            Log.i(TAG, "writing address: 0x" + Integer.toHexString(address));
-            setAddressPointer(address);
-        }*/
-        Log.i(TAG, "writing address: 0x" + Integer.toHexString(address));
-        setAddressPointer(address);
-
-        while (dfuStatus.bState != STATE_DFU_IDLE){
-            clearStatus();
-            getStatus(dfuStatus);
+        // Verify execution and success
+        byte[] status = new byte[6];
+        get_status(status);
+        if (status[4] == STATE_DFU_DOWNLOAD_BUSY || status[4] == STATE_DFU_DOWNLOAD_IDLE) {
+            onStatusMsg("setting address pointer...");
+        } else {
+            throw new Exception("error while setting pointer (not dfuDNBUSY)");
         }
 
-        Log.i(TAG, "writing block: " + blockNumber);
-        download(block, (blockNumber + 2));
-        executeVerifyStatus(dfuStatus, "block write");
+        bwPollTimeout = (status[3] & 0xFF) << 16;
+        bwPollTimeout |= (status[2] & 0xFF) << 8;
+        bwPollTimeout |= (status[1] & 0xFF);
+        Thread.sleep(bwPollTimeout); //Minimum time, in milliseconds, that the host should wait before sending a subsequent DFU_GETSTATUS request
 
-        //clearWaitIDLE(dfuStatus);
-    }
-
-    public void readBlock(int address, byte[] block, int blockNumber) throws Exception {
-
-        DfuStatus dfuStatus = new DfuStatus();
-
-
-        clearWaitIDLE(dfuStatus);
-
-        //set address for the first block written
-        /*if (0 == blockNumber) {
-            Log.i(TAG, "reading address: 0x" + Integer.toHexString(address));
-            setAddressPointer(address);
-        }*/
-        //Log.i(TAG, "reading address: 0x" + Integer.toHexString(address));
-        setAddressPointer(address);
-
-        clearWaitIDLE(dfuStatus);
-
-        upload(block, block.length, (blockNumber + 2));
-        getStatus(dfuStatus); //for upload its reading from memory so its very fast. No BUSY state.
-        //executeVerifyStatus(dfuStatus, "block read");
-
-        //clearWaitIDLE(dfuStatus);
-    }
-
-
-    //execute and verify action using getStatus(). arguments: where the error occurs (for what operation)
-    private void executeVerifyStatus(DfuStatus dfuStatus, String operation) throws Exception {
-        getStatus(dfuStatus);   // to execute
-        if (dfuStatus.bState != STATE_DFU_DOWNLOAD_BUSY) {
-            throw new Exception("error on " + operation + " , execution failed (dfuBUSY not returned)");
+        get_status(status);
+        if (status[4] == STATE_DFU_IDLE || status[4] == STATE_DFU_DOWNLOAD_IDLE) {
+            onStatusMsg("setting address pointer complete.\n");
+        } else {
+            throw new Exception("setting pointer failed");
         }
-        getStatus(dfuStatus);   // to verify action
-        if (dfuStatus.bState == STATE_DFU_ERROR) {
-            throw new Exception("error on " + operation + " , verification failed (dfuERROR)");
+
+        return r;
+    }
+
+    public void write_flash() throws Exception {
+
+        AssetManager assetManager = context.getAssets();
+        InputStream inputStream = assetManager.open("dfu.dfu");
+
+        byte[] writeBuffer = new byte[BLOCK_SIZE];
+        byte[] readBuffer = new byte[BLOCK_SIZE];
+        int blockNum = 2;
+        int readBytes;
+
+        while ((readBytes = inputStream.read(writeBuffer, 0, BLOCK_SIZE)) > 0) {
+            write_block(writeBuffer, blockNum, readBytes);
+
+            // Verify block write
+            wait_upload_idle();
+            read_block(readBuffer, blockNum, readBytes);
+
+            // You can log the read buffer using a method similar to print_block if needed
+            if (equalArrays(writeBuffer, readBuffer, readBytes)) {
+                onStatusMsg("Block " + blockNum + " verified successfully.\n");
+            } else {
+                throw new Exception("Error verifying block " + (blockNum-2) + ".");
+            }
+
+            blockNum++;
         }
+
+        inputStream.close();
+
     }
 
-    // Clears status and waits for DFU_IDLE status. useful to crear DFU_ERROR status.
-    public void clearWaitIDLE(DfuStatus dfuStatus) throws Exception {
-        do {
-            clearStatus();
-            getStatus(dfuStatus);
-        } while (dfuStatus.bState != STATE_DFU_IDLE);
-    }
-
-    private void getStatus(DfuStatus status) throws Exception {
-        byte[] buffer = new byte[6];
-        int length = usb.controlTransfer(DFU_RequestType | USB_DIR_IN, DFU_GETSTATUS, 0, 0, buffer, 6, 500);
-
-        if (length < 0) {
-            throw new Exception("USB Failed during getStatus");
+    private boolean equalArrays(byte[] a, byte[] b, int length) {
+        if (a == b) {
+            return true;
         }
-        status.bStatus = buffer[0]; // state during request
-        status.bState = buffer[4]; // state after request
-        status.bwPollTimeout = (buffer[3] & 0xFF) << 16;
-        status.bwPollTimeout |= (buffer[2] & 0xFF) << 8;
-        status.bwPollTimeout |= (buffer[1] & 0xFF);
-    }
-
-    private void clearStatus() throws Exception {
-        int length = usb.controlTransfer(DFU_RequestType, DFU_CLRSTATUS, 0, 0, null, 0, 0);
-        if (length < 0) {
-            throw new Exception("USB Failed during clearStatus");
+        if (a == null || b == null || a.length < length || b.length < length) {
+            return false;
         }
-    }
-
-
-    public void upload(byte[] data, int length, int blockNum) throws Exception {
-        int len = usb.controlTransfer(DFU_RequestType | USB_DIR_IN, DFU_UPLOAD, blockNum, 0, data, length, 100);
-        Log.i(TAG, "block number: " + blockNum + "length");
-        if (len < 0) {
-            throw new Exception("USB comm failed during upload");
+        for (int i = 0; i < length; i++) {
+            if (a[i] != b[i]) {
+                return false;
+            }
         }
+        return true;
     }
 
-    // use for commands
-    private void download(byte[] data) throws Exception {
-        int len = usb.controlTransfer(DFU_RequestType, DFU_DNLOAD, 0, 0, data, data.length, 50);
-        if (len < 0) {
-            throw new Exception("USB Failed during command download");
-        }
-    }
 
-    // use for firmware download
-    private void download(byte[] data, int nBlock) throws Exception {
-        int len = usb.controlTransfer(DFU_RequestType, DFU_DNLOAD, nBlock, 0, data, data.length, 0);
-        if (len < 0) {
-            throw new Exception("USB Failed during multi-block download");
-        }
-    }
 
-    //for tests only
-    public void readImage(byte[] deviceFw) throws Exception {
 
-        DfuStatus dfuStatus = new DfuStatus();
-        int maxBlockSize = 4;
-        int startAddress = 0x08000004;
-        byte[] block = new byte[maxBlockSize];
-        int nBlock = 0;
-        int remLength = deviceFw.length;
-        int numOfBlocks = remLength / maxBlockSize;
 
-        clearWaitIDLE(dfuStatus);
 
-        setAddressPointer(startAddress);
-
-        clearWaitIDLE(dfuStatus);
-
-        upload(block, maxBlockSize, nBlock + 2);
-        getStatus(dfuStatus); //for
-        Log.i(TAG, "reading: 0x" + Integer.toHexString(block[0]) + Integer.toHexString(block[1]) + Integer.toHexString(block[2]) + Integer.toHexString(block[3]));
-
-    }
 
     // stores the result of a GetStatus DFU request
     public class DfuStatus {
@@ -333,5 +436,9 @@ public class Dfu {
         int bwPollTimeout;  // minimum time in ms before next getStatus call should be made
         byte bState;        // state after request
     }
+
+
+
+
 
 }

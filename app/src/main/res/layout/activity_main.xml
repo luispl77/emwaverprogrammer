@@ -40,45 +40,6 @@
                 android:layout_marginBottom="32dp"
                 android:text="@string/device_status"/>
 
-            <Button
-                android:id="@+id/btnMassErase"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_alignParentLeft="true"
-                android:layout_alignParentStart="true"
-                android:layout_below="@+id/status"
-                android:clickable="true"
-                android:text="Mass Erase"/>
-
-            <Button
-                android:id="@+id/btnCustom"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_alignParentLeft="true"
-                android:layout_alignParentStart="true"
-                android:layout_below="@+id/btnMassErase"
-                android:clickable="true"
-                android:text="test write first block"/>
-
-            <Button
-                android:id="@+id/btnCustom2"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_alignParentLeft="true"
-                android:layout_alignParentStart="true"
-                android:layout_below="@+id/btnCustom"
-                android:clickable="true"
-                android:text="test read first block"/>
-
-            <Button
-                android:id="@+id/btnCustom3"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_alignParentLeft="true"
-                android:layout_alignParentStart="true"
-                android:layout_below="@+id/btnCustom2"
-                android:clickable="true"
-                android:text="read all"/>
 
             <Button
                 android:id="@+id/clearTxt"
@@ -86,40 +47,52 @@
                 android:layout_height="wrap_content"
                 android:layout_alignParentLeft="true"
                 android:layout_alignParentStart="true"
-                android:layout_below="@+id/btnCustom3"
+                android:layout_below="@+id/status"
                 android:clickable="true"
                 android:text="clear"/>
 
+
             <Button
-                android:id="@+id/btnCustom4"
+                android:id="@+id/writeBlockButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_alignParentLeft="true"
                 android:layout_alignParentStart="true"
                 android:layout_below="@+id/clearTxt"
                 android:clickable="true"
-                android:text="write file"/>
+                android:text="write block"/>
 
             <Button
-                android:id="@+id/btnCustom5"
+                android:id="@+id/massEraseButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_alignParentLeft="true"
                 android:layout_alignParentStart="true"
-                android:layout_below="@+id/btnCustom4"
+                android:layout_below="@+id/writeBlockButton"
                 android:clickable="true"
-                android:text="write file all"/>
-
+                android:text="mass erase"/>
 
             <Button
-                android:id="@+id/btnAttach"
+                android:id="@+id/readFlashButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_alignParentLeft="true"
                 android:layout_alignParentStart="true"
-                android:layout_below="@+id/btnCustom5"
+                android:layout_below="@+id/massEraseButton"
                 android:clickable="true"
-                android:text="select file"/>
+                android:text="read flash"/>
+
+            <Button
+                android:id="@+id/writeFlashButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentLeft="true"
+                android:layout_alignParentStart="true"
+                android:layout_below="@+id/readFlashButton"
+                android:clickable="true"
+                android:text="write flash"/>
+
+
 
         </RelativeLayout>
     </LinearLayout>

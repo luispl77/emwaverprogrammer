@@ -54,21 +54,8 @@ public class MainActivity extends Activity implements
 
         status = findViewById(R.id.status);
 
-        Button attachButton = findViewById(R.id.btnAttach);
-        attachButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                openFileChooser();
-            }
-        });
 
-        Button massErase = findViewById(R.id.btnMassErase);
-        massErase.setOnClickListener(new Button.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                dfu.massErase();
-            }
-        });
+
 
         Button clearTxtView = findViewById(R.id.clearTxt);
         clearTxtView.setOnClickListener(new Button.OnClickListener() {
@@ -78,168 +65,71 @@ public class MainActivity extends Activity implements
             }
         });
 
-        Button program = findViewById(R.id.btnCustom);
-        program.setOnClickListener(new Button.OnClickListener() {
+
+
+        Button writeBlockButton = findViewById(R.id.writeBlockButton);
+        writeBlockButton.setOnClickListener(new Button.OnClickListener() {
             @Override
             public void onClick(View v) {
-                int writeAddress = 0x08000004;
-                byte[] dataBlock = new byte[] { 0x70, 0x70, 0x70, 0x70 };
-                int blockNumber = 0;
+                int BLOCK_SIZE = 2048;
+                int startAddress = 0x08000000;
+                byte [] buffer = new byte[BLOCK_SIZE];
+                // Initialize all elements to 0x69
+                byte valueToSet = (byte) 0x69; // Casting is important as 0x69 is an int literal
+                for (int i = 0; i < BLOCK_SIZE; i++)
+                    buffer[i] = valueToSet;
                 try {
-                    dfu.writeBlock(writeAddress, dataBlock, blockNumber);
-                    status.append("Data written successfully to address 0x" + Integer.toHexString(writeAddress) + "\n");
-                } catch (Exception e) {
-                    status.append("Error writing data: " + e.getMessage() + "\n");
-                }
-            }
-        });
 
-        Button read = findViewById(R.id.btnCustom2);
-        read.setOnClickListener(new Button.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                int readAddress = 0x08000000;
-                int blockNumber = 1;
-                byte[] dataBlockRead = new byte[4];
-                try {
-                    dfu.readBlock(readAddress, dataBlockRead, blockNumber);
-                    StringBuilder hexString = new StringBuilder();
-                    for (byte b : dataBlockRead)
-                        hexString.append(String.format("%02X", b));
-                    status.append("Data read successfully: 0x" + hexString.toString() + "\n");
-                } catch (Exception e) {
-                    status.append("Error reading data: " + e.getMessage() + "\n");
-                }
+                    dfu.mass_erase();
+                    dfu.set_address_pointer(0x08000000);
 
-                byte[] image = new byte[900];
-                try {
-                    dfu.readImage(image);
+                    byte[] block = new byte[BLOCK_SIZE];
+                    Arrays.fill(block, (byte) 0x69); // Fill the block with 0x69
+                    dfu.write_block(block, 2, BLOCK_SIZE); // Assuming writeBlock method is implemented in your Dfu class
+                    //status.append("wrote flash\n");
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
             }
         });
 
-        Button writeFile = findViewById(R.id.btnCustom4);
-        writeFile.setOnClickListener(new Button.OnClickListener() {
+
+        Button massEraseButton = findViewById(R.id.massEraseButton);
+        massEraseButton.setOnClickListener(new Button.OnClickListener() {
             @Override
             public void onClick(View v) {
-                int startAddress = 0x08000000;
-                int endAddress = 0x08000080;
-                byte[] block = new byte[4];
-
                 try {
-                    // Open the dfu.dfu file from assets
-                    InputStream inputStream = getAssets().open("dfu.dfu");
-                    BufferedInputStream bufferedInputStream = new BufferedInputStream(inputStream);
-
-
-                    int addressOffset = 0; // Offset from the start address
-                    int currentAddress = 0;
-
-                    while (currentAddress < endAddress && bufferedInputStream.read(block) != -1) {
-                        currentAddress = startAddress + addressOffset;
-                        /*status.append(String.format("file read "));
-                        for (int i = 0; i < 4; i++)
-                            status.append(String.format("%02X ", block[i]));
-                        status.append(String.format("\n"));*/
-                        try {
-                            // Write the block to the dfu at the current address
-                            dfu.writeBlock(currentAddress, block, 0); // blockNumber is always 0
-                            status.append("Data written to address 0x" + Integer.toHexString(currentAddress) + "\n");
-                            addressOffset += block.length;
-
-                        } catch (Exception e) {
-                            status.append("Error writing to dfu at address 0x" + Integer.toHexString(currentAddress) + ": " + e.getMessage() + "\n");
-                        }
-                    }
-
-                    bufferedInputStream.close();
-                    inputStream.close();
-
-                } catch (IOException e) {
-                    status.append("Error opening dfu.dfu file: " + e.getMessage() + "\n");
+                    dfu.mass_erase();
+                } catch (Exception e) {
+                    status.append(e.toString());
                 }
             }
         });
 
-        Button readAll = findViewById(R.id.btnCustom3);
-        readAll.setOnClickListener(new Button.OnClickListener() {
+        Button readFlashButton = findViewById(R.id.readFlashButton);
+        readFlashButton.setOnClickListener(new Button.OnClickListener() {
             @Override
             public void onClick(View v) {
-                int startAddress = 0x08000000;
-                //int endAddress = 0x08006A90;
-                int endAddress = 0x08000040;
-                byte[] block = new byte[4];
-
-                for (int address = startAddress; address <= endAddress; address += block.length) {
-                    try {
-                        dfu.readBlock(address, block, 0);
-                        // Directly convert the byte array to a hex string
-                        StringBuilder hexString = new StringBuilder();
-                        for (byte b : block) {
-                            hexString.append(String.format("%02X", b));
-                        }
-
-                        status.append("Block " + (address - startAddress) / 4 + " Address 0x" + Integer.toHexString(address) + ": " + hexString.toString() + "\n");
-
-                    } catch (Exception e) {
-                        status.append("Error reading flash at address 0x" + Integer.toHexString(address) + e.getMessage() + "\n");
-                    }
+                try {
+                    dfu.read_flash(0x6BE0);
+                } catch (Exception e) {
+                    status.append(e.toString());
                 }
             }
         });
 
-        Button writeVerify = findViewById(R.id.btnCustom5);
-        writeVerify.setOnClickListener(new Button.OnClickListener() {
+        Button writeFlashButton = findViewById(R.id.writeFlashButton);
+        writeFlashButton.setOnClickListener(new Button.OnClickListener() {
             @Override
             public void onClick(View v) {
+                try {
+                    dfu.mass_erase();
+                    dfu.set_address_pointer(0x08000000);
 
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        int startAddress = 0x08000000;
-                        int endAddress = 0x08000080;
-                        byte[] block = new byte[4];
-                        byte[] blockReading = new byte[4];
-                        int addressOffset = 0; // Offset from the start address
-                        int currentAddress = 0;
-
-                        try {
-                            // Open the dfu.dfu file from assets
-                            InputStream inputStream = getAssets().open("dfu.dfu");
-                            BufferedInputStream bufferedInputStream = new BufferedInputStream(inputStream);
-
-                            while (currentAddress < endAddress && bufferedInputStream.read(block) != -1) {
-                                currentAddress = startAddress + addressOffset;
-                                try {
-                                    // Write the block to the dfu at the current address
-                                    dfu.writeBlock(currentAddress, block, 0); // blockNumber is always 0
-                                    dfu.readBlock(currentAddress, blockReading, 0);
-                                    if(!Arrays.equals(block, blockReading))
-                                        continue; //if verification fails, go back and repeat
-                                    final int finalCurrentAddress = currentAddress; // final copy
-                                    runOnUiThread(new Runnable() {
-                                        @Override
-                                        public void run() {
-                                            status.append("Data written to address 0x" + Integer.toHexString(finalCurrentAddress) + "\n");
-                                        }
-                                    });
-                                    addressOffset += block.length;
-
-                                } catch (Exception e) {
-                                    status.append("Error writing to dfu at address 0x" + Integer.toHexString(currentAddress) + ": " + e.getMessage() + "\n");
-                                }
-                            }
-
-                            bufferedInputStream.close();
-                            inputStream.close();
-
-                        } catch (IOException e) {
-                            status.append("Error opening dfu.dfu file: " + e.getMessage() + "\n");
-                        }
-                    }
-                }).start();
+                    dfu.write_flash();
+                } catch (Exception e) {
+                    status.append(e.toString());
+                }
             }
         });
 
